@@ -61,6 +61,7 @@ JSVM::JSVM(Context* context) :
     SharedPtr<JSEventDispatcher> dispatcher(new JSEventDispatcher(context_));
     context_->RegisterSubsystem(dispatcher);
     context_->AddGlobalEventListener(dispatcher);
+    RefCounted::AddRefCountChangedFunction(OnRefCountChanged);
 
 }
 
@@ -68,6 +69,7 @@ JSVM::~JSVM()
 {
     context_->RemoveGlobalEventListener(context_->GetSubsystem<JSEventDispatcher>());
     context_->RemoveSubsystem(JSEventDispatcher::GetTypeStatic());
+    RefCounted::RemoveRefCountChangedFunction(OnRefCountChanged);
 
     duk_destroy_heap(ctx_);
     instance_ = NULL;
@@ -138,6 +140,66 @@ void JSVM::SubscribeToEvents()
 {
     SubscribeToEvent(E_UPDATE, ATOMIC_HANDLER(JSVM, HandleUpdate));
 }
+
+void JSVM::OnRefCountChanged(RefCounted* refCounted, int refCount)
+{
+    assert(instance_);
+    assert(refCounted->JSGetHeapPtr());
+
+    if (refCount == 1)
+    {
+        // only script reference is left, so unstash
+        instance_->Unstash(refCounted);
+    }
+    else if (refCount == 2)
+    {
+        // We are going from solely having a script reference to having another reference
+        instance_->Stash(refCounted, false);
+    }
+
+}
+
+void JSVM::Stash(RefCounted* refCounted, bool addRef)
+{
+    assert(refCounted);
+    assert(refCounted->JSGetHeapPtr());
+
+    // Add Script Reference
+    if (addRef)
+    {
+        void* heapptr = refCounted->JSGetHeapPtr();
+        refCounted->JSSetHeapPtr(0);        
+        refCounted->AddRef();
+        refCounted->JSSetHeapPtr(heapptr);
+    }
+
+    duk_push_global_stash(ctx_);
+    duk_get_prop_index(ctx_, -1, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
+    // can't use instance as key, as this coerces to [Object] for
+    // string property, pointer will be string representation of
+    // address, so, unique key
+    duk_push_pointer(ctx_, refCounted);
+    duk_push_heapptr(ctx_, refCounted->JSGetHeapPtr());
+    duk_put_prop(ctx_, -3);
+    duk_pop_2(ctx_);
+
+}
+void JSVM::Unstash(RefCounted* refCounted)
+{
+    assert(refCounted);
+    assert(refCounted->JSGetHeapPtr());
+
+    duk_push_global_stash(ctx_);
+    duk_get_prop_index(ctx_, -1, JS_GLOBALSTASH_INDEX_REFCOUNTED_REGISTRY);
+    // can't use instance as key, as this coerces to [Object] for
+    // string property, pointer will be string representation of
+    // address, so, unique key
+    duk_push_pointer(ctx_, refCounted);
+    duk_push_undefined(ctx_);
+    duk_put_prop(ctx_, -3);
+    duk_pop_2(ctx_);
+}
+
 
 void JSVM::HandleUpdate(StringHash eventType, VariantMap& eventData)
 {

@@ -58,12 +58,30 @@ void RefCounted::AddRef()
 {
     assert(refCount_->refs_ >= 0);
     (refCount_->refs_)++;
+
+    if (jsHeapPtr_ && refCount_->refs_ == 2)
+    {
+        for (unsigned i = 0; i < refCountChangedFunctions_.Size(); i++)
+        {
+            refCountChangedFunctions_[i](this, 2);
+        }
+    }
 }
 
 void RefCounted::ReleaseRef()
 {
     assert(refCount_->refs_ > 0);
     (refCount_->refs_)--;
+
+
+    if (jsHeapPtr_ && refCount_->refs_ == 1)
+    {
+        for (unsigned i = 0; i < refCountChangedFunctions_.Size(); i++)
+        {
+            refCountChangedFunctions_[i](this, 1);
+        }
+    }
+
     if (!refCount_->refs_)
         delete this;
 }
@@ -78,5 +96,21 @@ int RefCounted::WeakRefs() const
     // Subtract one to not return the internally held reference
     return refCount_->weakRefs_ - 1;
 }
+
+// ATOMIC BEGIN
+
+PODVector<RefCountChangedFunction> RefCounted::refCountChangedFunctions_;
+
+void RefCounted::AddRefCountChangedFunction(RefCountChangedFunction function)
+{
+    refCountChangedFunctions_.Push(function);
+}
+
+void RefCounted::RemoveRefCountChangedFunction(RefCountChangedFunction function)
+{
+    refCountChangedFunctions_.Remove(function);
+}
+
+// ATOMIC END
 
 }

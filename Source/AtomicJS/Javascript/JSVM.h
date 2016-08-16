@@ -153,6 +153,8 @@ public:
 
     }
 
+    void Stash(RefCounted* refCounted, bool addRef = false);
+
     inline RefCounted* GetObjectPtr(void* heapptr, bool allowNull = false)
     {
 #ifdef JSVM_DEBUG
@@ -199,6 +201,8 @@ public:
 
 private:
 
+    void Unstash(RefCounted* refCounted);
+
     struct JSAPIPackageRegistration
     {
         JSAPIPackageRegistration()
@@ -225,6 +229,8 @@ private:
         JSVMPackageRegistrationSettingsFunction registrationSettingsFunction;
         VariantMap settings;
     };
+
+    static void OnRefCountChanged(RefCounted* refCounted, int refCount);
 
     void SubscribeToEvents();
     void HandleUpdate(StringHash eventType, VariantMap& eventData);

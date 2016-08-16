@@ -23,6 +23,7 @@
 #pragma once
 
 #include "Atomic/Atomic.h"
+#include "Vector.h"
 
 namespace Atomic
 {
@@ -30,7 +31,10 @@ namespace Atomic
 // ATOMIC BEGIN
 
 class RefCounted;
-typedef void (*RefCountedDeletedFunction)(RefCounted*);
+
+// function that is called when ref count goes to 1 or 2+, used for script object lifetime
+typedef void (*RefCountChangedFunction)(RefCounted*, int refCount);
+
 typedef const void* ClassID;
 
 /// Macro to be included in RefCounted derived classes for efficient RTTI
@@ -98,6 +102,9 @@ public:
     inline void* JSGetHeapPtr() const { return jsHeapPtr_; }
     inline void  JSSetHeapPtr(void* heapptr) { jsHeapPtr_ = heapptr; }
 
+    static void AddRefCountChangedFunction(RefCountChangedFunction function);
+    static void RemoveRefCountChangedFunction(RefCountChangedFunction function);
+
 // ATOMIC END
 
 private:
@@ -110,7 +117,11 @@ private:
     RefCount* refCount_;
 
     // ATOMIC BEGIN
+
+    static PODVector<RefCountChangedFunction> refCountChangedFunctions_;
+
     void* jsHeapPtr_;
+
     // ATOMIC END
 
 };
